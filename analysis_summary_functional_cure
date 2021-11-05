@@ -1,0 +1,274 @@
+# Re: Obtaining summary estimates for HBeAg and HBsAg seroclearance events
+# Study: Review on functional cure in HIV-HBV co-infection
+# 
+# Data prepared by: Lorenza Dezanet, Anders Boyd 
+# Programmed by: Anders Boyd
+# Date initiated: 2021 April 15 
+
+
+
+# specs
+
+setwd("[path where data folder is stored]")
+
+
+# installing packages
+
+library("tidyverse")
+library("meta")
+library("metafor")
+
+
+
+
+# HBeAg seroclearance 
+
+		# processing data 
+
+				# obtaining dataset - HBV monoinfected
+hbeserocl.mono <- read.csv("data/monovhb_hbe_serocl.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbeserocl.mono)
+head(hbeserocl.mono, 10)
+
+		
+				# creating analytical variables 
+hbeserocl.mono$fu_pyo <- ifelse(hbeserocl.mono$fu_mean_typ == "mo", hbeserocl.mono$n * hbeserocl.mono$fu_mean/12, hbeserocl.mono$fu_pyo)
+hbeserocl.mono$fu_pyo <- ifelse(hbeserocl.mono$fu_median_typ == "yr", hbeserocl.mono$n * hbeserocl.mono$fu_median, hbeserocl.mono$fu_pyo)
+hbeserocl.mono$fu_pyo <- ifelse(hbeserocl.mono$fu_median_typ == "mo", hbeserocl.mono$n * hbeserocl.mono$fu_median/12, hbeserocl.mono$fu_pyo)
+hbeserocl.mono$fu_pyo <- ifelse(hbeserocl.mono$fu_median_typ == "wk", hbeserocl.mono$n * hbeserocl.mono$fu_median/52, hbeserocl.mono$fu_pyo)
+
+hbeserocl.mono$infection <- "HBV"
+
+				# sorting by incidence for cleaner forest plot
+hbeserocl.mono$ir_100py <- (hbeserocl.mono$events/hbeserocl.mono$fu_pyo)*100 
+hbeserocl.mono <- hbeserocl.mono[order(hbeserocl.mono$ir_100py), ]
+
+				
+
+				# obtaining dataset - HIV-HBV co-infected
+hbeserocl.vihvhb <- read.csv("data/vihvhb_hbe_serocl.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbeserocl.vihvhb)
+head(hbeserocl.vihvhb, 10)
+
+		
+				# creating analytical variables 
+hbeserocl.vihvhb$fu_pyo <- ifelse(hbeserocl.vihvhb$fu_mean_typ == "yr", hbeserocl.vihvhb$n * hbeserocl.vihvhb$fu_mean, hbeserocl.vihvhb$fu_pyo)
+hbeserocl.vihvhb$fu_pyo <- ifelse(hbeserocl.vihvhb$fu_mean_typ == "mo", hbeserocl.vihvhb$n * hbeserocl.vihvhb$fu_mean/12, hbeserocl.vihvhb$fu_pyo)
+hbeserocl.vihvhb$fu_pyo <- ifelse(hbeserocl.vihvhb$fu_median_typ == "yr", hbeserocl.vihvhb$n * hbeserocl.vihvhb$fu_median, hbeserocl.vihvhb$fu_pyo)
+hbeserocl.vihvhb$fu_pyo <- ifelse(hbeserocl.vihvhb$fu_median_typ == "mo", hbeserocl.vihvhb$n * hbeserocl.vihvhb$fu_median/12, hbeserocl.vihvhb$fu_pyo)
+hbeserocl.vihvhb$fu_pyo <- ifelse(hbeserocl.vihvhb$fu_median_typ == "wk", hbeserocl.vihvhb$n * hbeserocl.vihvhb$fu_median/52, hbeserocl.vihvhb$fu_pyo)
+
+hbeserocl.vihvhb$infection <- "HIV-HBV"
+
+				# sorting by incidence for cleaner forest plot
+hbeserocl.vihvhb$ir_100py <- (hbeserocl.vihvhb$events/hbeserocl.vihvhb$fu_pyo)*100 
+hbeserocl.vihvhb <- hbeserocl.vihvhb[order(hbeserocl.vihvhb$ir_100py), ]
+
+
+				# binding HBV and HIV-HBV datasets together 
+hbeserocl <- rbind(hbeserocl.mono, hbeserocl.vihvhb) 
+
+
+		
+		# median levels	
+ir <- hbeserocl.mono$events / hbeserocl.mono$fu_pyo
+median(ir)
+ir <- hbeserocl.vihvhb$events / hbeserocl.vihvhb$fu_pyo
+median(ir)
+
+
+		# forest plot 
+hbeserocl$fu_pyo100 <- hbeserocl$fu_pyo/100
+hbeserocl$fu_pyo <- round(hbeserocl$fu_pyo, digits = 0)
+hbeserocl$infection2 <- ifelse(hbeserocl$infection == "HBV", 1, 2)
+
+dat <- escalc(measure="IR", xi = events, ti = fu_pyo100, data = hbeserocl,
+              slab=paste(study, year, sep=", "))
+res <- rma(yi, vi, data = dat)
+
+windows(width=6.5, height=5.0, pointsize=10)
+par(mar=c(4,0,4,0))
+forest(res, addfit = FALSE, refline = NA, 
+	slab=paste(hbeserocl$study, ", ", hbeserocl$year, sep=""),
+	xlim=c(-28,45), at=c(0, 5, 10, 15, 20, 25, 30),
+	xlab = "Events per 100 person-years",
+      order = order(hbeserocl$infection2, decreasing = TRUE), rows = c(1:10,13:19),
+	ilab = cbind(hbeserocl$events, hbeserocl$fu_pyo),
+	ilab.xpos=c(-8, -3), cex=.8, ylim=c(1,23), efac=1.8)
+text(-28, 22, "Author(s) and Year", pos=4, font=2, cex=.8)
+text(45, 22, "IR [95% CI]", pos=2, font=2, cex=.8)
+text(c(-8, -3), 22, c("Events", "PYO"), font=2, cex=.8)
+par(font = 4) 
+text(-28, c(20, 11), pos=4, c("HBV mono-infection", "HIV-HBV co-infection"), cex=.8)
+
+							# NOTE: all analysis follows a similar pattern of procedures
+							# 	hence no general notation from here
+
+
+
+
+# HBeAg seroconversion
+
+		# data
+hbeseroco.mono <- read.csv("data/monovhb_hbe_seroco.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbeseroco.mono)
+head(hbeseroco.mono, 11)
+
+hbeseroco.mono$fu_pyo <- ifelse(hbeseroco.mono$fu_mean_typ == "mo", hbeseroco.mono$n * hbeseroco.mono$fu_mean/12, hbeseroco.mono$fu_pyo)
+hbeseroco.mono$fu_pyo <- ifelse(hbeseroco.mono$fu_median_typ == "yr", hbeseroco.mono$n * hbeseroco.mono$fu_median, hbeseroco.mono$fu_pyo)
+hbeseroco.mono$fu_pyo <- ifelse(hbeseroco.mono$fu_median_typ == "mo", hbeseroco.mono$n * hbeseroco.mono$fu_median/12, hbeseroco.mono$fu_pyo)
+hbeseroco.mono$fu_pyo <- ifelse(hbeseroco.mono$fu_median_typ == "wk", hbeseroco.mono$n * hbeseroco.mono$fu_median/52, hbeseroco.mono$fu_pyo)
+
+hbeseroco.mono$infection <- "HBV"
+
+hbeseroco.mono$ir_100py <- (hbeseroco.mono$events/hbeseroco.mono$fu_pyo)*100 
+hbeseroco.mono <- hbeseroco.mono[order(hbeseroco.mono$ir_100py), ]
+
+
+hbeseroco.vihvhb <- read.csv("data/vihvhb_hbe_seroco.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbeseroco.vihvhb)
+head(hbeseroco.vihvhb, 10)
+
+hbeseroco.vihvhb$fu_pyo <- ifelse(hbeseroco.vihvhb$fu_mean_typ == "yr", hbeseroco.vihvhb$n * hbeseroco.vihvhb$fu_mean, hbeseroco.vihvhb$fu_pyo)
+hbeseroco.vihvhb$fu_pyo <- ifelse(hbeseroco.vihvhb$fu_mean_typ == "mo", hbeseroco.vihvhb$n * hbeseroco.vihvhb$fu_mean/12, hbeseroco.vihvhb$fu_pyo)
+hbeseroco.vihvhb$fu_pyo <- ifelse(hbeseroco.vihvhb$fu_median_typ == "yr", hbeseroco.vihvhb$n * hbeseroco.vihvhb$fu_median, hbeseroco.vihvhb$fu_pyo)
+hbeseroco.vihvhb$fu_pyo <- ifelse(hbeseroco.vihvhb$fu_median_typ == "mo", hbeseroco.vihvhb$n * hbeseroco.vihvhb$fu_median/12, hbeseroco.vihvhb$fu_pyo)
+hbeseroco.vihvhb$fu_pyo <- ifelse(hbeseroco.vihvhb$fu_median_typ == "wk", hbeseroco.vihvhb$n * hbeseroco.vihvhb$fu_median/52, hbeseroco.vihvhb$fu_pyo)
+
+hbeseroco.vihvhb$infection <- "HIV-HBV"
+
+hbeseroco.vihvhb$ir_100py <- (hbeseroco.vihvhb$events/hbeseroco.vihvhb$fu_pyo)*100 
+hbeseroco.vihvhb <- hbeseroco.vihvhb[order(hbeseroco.vihvhb$ir_100py), ]
+
+hbeseroco <- rbind(hbeseroco.mono, hbeseroco.vihvhb) 
+
+		# analysis
+ir <- hbeseroco.mono$events / hbeseroco.mono$fu_pyo
+median(ir)
+ir <- hbeseroco.vihvhb$events / hbeseroco.vihvhb$fu_pyo
+median(ir)
+
+
+
+
+
+# HBsAg seroclearance
+
+		# data
+hbsserocl.mono <- read.csv("data/monovhb_hbs_serocl.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbsserocl.mono)
+head(hbsserocl.mono, 13)
+
+hbsserocl.mono$fu_pyo <- ifelse(hbsserocl.mono$fu_mean_typ == "mo", hbsserocl.mono$n * hbsserocl.mono$fu_mean/12, hbsserocl.mono$fu_pyo)
+hbsserocl.mono$fu_pyo <- ifelse(hbsserocl.mono$fu_median_typ == "yr", hbsserocl.mono$n * hbsserocl.mono$fu_median, hbsserocl.mono$fu_pyo)
+hbsserocl.mono$fu_pyo <- ifelse(hbsserocl.mono$fu_median_typ == "mo", hbsserocl.mono$n * hbsserocl.mono$fu_median/12, hbsserocl.mono$fu_pyo)
+hbsserocl.mono$fu_pyo <- ifelse(hbsserocl.mono$fu_median_typ == "wk", hbsserocl.mono$n * hbsserocl.mono$fu_median/52, hbsserocl.mono$fu_pyo)
+
+hbsserocl.mono$infection <- "HBV"
+
+hbsserocl.mono$ir_100py <- (hbsserocl.mono$events/hbsserocl.mono$fu_pyo)*100 
+hbsserocl.mono <- hbsserocl.mono[order(hbsserocl.mono$ir_100py), ]
+
+hbsserocl.vihvhb <- read.csv("data/vihvhb_hbs_serocl.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbsserocl.vihvhb)
+head(hbsserocl.vihvhb, 15)
+
+hbsserocl.vihvhb$fu_pyo <- ifelse(hbsserocl.vihvhb$fu_mean_typ == "yr", hbsserocl.vihvhb$n * hbsserocl.vihvhb$fu_mean, hbsserocl.vihvhb$fu_pyo)
+hbsserocl.vihvhb$fu_pyo <- ifelse(hbsserocl.vihvhb$fu_mean_typ == "mo", hbsserocl.vihvhb$n * hbsserocl.vihvhb$fu_mean/12, hbsserocl.vihvhb$fu_pyo)
+hbsserocl.vihvhb$fu_pyo <- ifelse(hbsserocl.vihvhb$fu_median_typ == "yr", hbsserocl.vihvhb$n * hbsserocl.vihvhb$fu_median, hbsserocl.vihvhb$fu_pyo)
+hbsserocl.vihvhb$fu_pyo <- ifelse(hbsserocl.vihvhb$fu_median_typ == "mo", hbsserocl.vihvhb$n * hbsserocl.vihvhb$fu_median/12, hbsserocl.vihvhb$fu_pyo)
+hbsserocl.vihvhb$fu_pyo <- ifelse(hbsserocl.vihvhb$fu_median_typ == "wk", hbsserocl.vihvhb$n * hbsserocl.vihvhb$fu_median/52, hbsserocl.vihvhb$fu_pyo)
+
+hbsserocl.vihvhb$infection <- "HIV-HBV"
+
+hbsserocl.vihvhb$ir_100py <- (hbsserocl.vihvhb$events/hbsserocl.vihvhb$fu_pyo)*100 
+hbsserocl.vihvhb <- hbsserocl.vihvhb[order(hbsserocl.vihvhb$ir_100py), ]
+
+hbsserocl <- rbind(hbsserocl.mono, hbsserocl.vihvhb) 
+
+
+		# analysis
+ir <- hbsserocl.mono$events / hbsserocl.mono$fu_pyo
+median(ir)
+ir <- hbsserocl.vihvhb$events / hbsserocl.vihvhb$fu_pyo
+median(ir)
+
+hbsserocl$fu_pyo100 <- hbsserocl$fu_pyo/100
+hbsserocl$fu_pyo <- round(hbsserocl$fu_pyo, digits = 0)
+hbsserocl$infection2 <- ifelse(hbsserocl$infection == "HBV", 1, 2)
+
+dat <- escalc(measure="IR", xi = events, ti = fu_pyo100, data = hbsserocl,
+              slab=paste(study, year, sep=", "))
+res <- rma(yi, vi, data = dat)
+
+windows(width=6.5, height=5.0, pointsize=10)
+par(mar=c(4,0,4,0))
+forest(res, addfit = FALSE, refline = NA, 
+	slab=paste(hbsserocl$study, ", ", hbsserocl$year, sep=""),
+	xlim=c(-28,30), at=c(0.0, 2.5, 5.0, 7.5, 10.0, 12.5, 15.0),
+	xlab = "Events per 100 person-years",
+      order = order(hbsserocl$infection2, decreasing = TRUE), rows = c(1:13,16:29),
+	ilab = cbind(hbsserocl$events, hbsserocl$fu_pyo),
+	ilab.xpos=c(-10, -6), cex=.8, ylim=c(1,33), efac=1.8)
+text(-28, 32, "Author(s) and Year", pos=4, font=2, cex=.8)
+text(30, 32, "IR [95% CI]", pos=2, font=2, cex=.8)
+text(c(-10, -6), 32, c("Events", "PYO"), font=2, cex=.8)
+par(font = 4) 
+text(-28, c(30, 14), pos=4, c("HBV mono-infection", "HIV-HBV co-infection"), cex=.8)
+
+
+
+
+# HBsAg seroconversion
+
+
+		# data
+hbsseroco.mono <- read.csv("data/monovhb_hbs_seroco.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbsseroco.mono)
+head(hbsseroco.mono, 10)
+
+hbsseroco.mono$fu_pyo <- ifelse(hbsseroco.mono$fu_mean_typ == "mo", hbsseroco.mono$n * hbsseroco.mono$fu_mean/12, hbsseroco.mono$fu_pyo)
+hbsseroco.mono$fu_pyo <- ifelse(hbsseroco.mono$fu_median_typ == "yr", hbsseroco.mono$n * hbsseroco.mono$fu_median, hbsseroco.mono$fu_pyo)
+hbsseroco.mono$fu_pyo <- ifelse(hbsseroco.mono$fu_median_typ == "mo", hbsseroco.mono$n * hbsseroco.mono$fu_median/12, hbsseroco.mono$fu_pyo)
+hbsseroco.mono$fu_pyo <- ifelse(hbsseroco.mono$fu_median_typ == "wk", hbsseroco.mono$n * hbsseroco.mono$fu_median/52, hbsseroco.mono$fu_pyo)
+
+hbsseroco.mono$infection <- "HBV"
+
+hbsseroco.mono$ir_100py <- (hbsseroco.mono$events/hbsseroco.mono$fu_pyo)*100 
+hbsseroco.mono <- hbsseroco.mono[order(hbsseroco.mono$ir_100py), ]
+
+hbsseroco.vihvhb <- read.csv("data/vihvhb_hbs_seroco.csv", sep = ";", header = TRUE, 
+				fill = TRUE, na.string = " ") 
+names(hbsseroco.vihvhb)
+head(hbsseroco.vihvhb, 11)
+
+hbsseroco.vihvhb$fu_pyo <- ifelse(hbsseroco.vihvhb$fu_mean_typ == "yr", hbsseroco.vihvhb$n * hbsseroco.vihvhb$fu_mean, hbsseroco.vihvhb$fu_pyo)
+hbsseroco.vihvhb$fu_pyo <- ifelse(hbsseroco.vihvhb$fu_mean_typ == "mo", hbsseroco.vihvhb$n * hbsseroco.vihvhb$fu_mean/12, hbsseroco.vihvhb$fu_pyo)
+hbsseroco.vihvhb$fu_pyo <- ifelse(hbsseroco.vihvhb$fu_median_typ == "yr", hbsseroco.vihvhb$n * hbsseroco.vihvhb$fu_median, hbsseroco.vihvhb$fu_pyo)
+hbsseroco.vihvhb$fu_pyo <- ifelse(hbsseroco.vihvhb$fu_median_typ == "mo", hbsseroco.vihvhb$n * hbsseroco.vihvhb$fu_median/12, hbsseroco.vihvhb$fu_pyo)
+hbsseroco.vihvhb$fu_pyo <- ifelse(hbsseroco.vihvhb$fu_median_typ == "wk", hbsseroco.vihvhb$n * hbsseroco.vihvhb$fu_median/52, hbsseroco.vihvhb$fu_pyo)
+
+hbsseroco.vihvhb$infection <- "HIV-HBV"
+
+hbsseroco.vihvhb$ir_100py <- (hbsseroco.vihvhb$events/hbsseroco.vihvhb$fu_pyo)*100 
+hbsseroco.vihvhb <- hbsseroco.vihvhb[order(hbsseroco.vihvhb$ir_100py), ]
+
+hbsseroco <- rbind(hbsseroco.mono, hbsseroco.vihvhb) 
+
+
+		# analysis
+ir <- hbsseroco.mono$events / hbsseroco.mono$fu_pyo
+median(ir)
+ir <- hbsseroco.vihvhb$events / hbsseroco.vihvhb$fu_pyo
+median(ir)
+
+
+
+## end of script
